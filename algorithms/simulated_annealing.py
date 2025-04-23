@@ -15,7 +15,7 @@ logging.basicConfig(
 )
 
 class SimulatedAnnealing(Algorithm):
-    def __init__(self, cities, use_gpu=False, initial_temperature=1000, cooling_rate=0.95, max_iterations=10000, min_temp=1e-3):
+    def __init__(self, cities, use_gpu=False, initial_temperature=1000, cooling_rate=0.95, max_iterations=3000, min_temp=1e-3):
         """
         Inicializa a classe com as cidades, configurações de GPU e parâmetros do algoritmo.
         """
@@ -93,7 +93,7 @@ class SimulatedAnnealing(Algorithm):
             convergence.append(best_cost)
 
             # Interrompe se mais de 100 iterações sem progresso
-            if no_progress_count > 100:
+            if no_progress_count > 1000:
                 logging.info("Interrompendo devido a falta de progresso.")
                 break
 
@@ -105,7 +105,7 @@ class SimulatedAnnealing(Algorithm):
         current, peak = tracemalloc.get_traced_memory()
         tracemalloc.stop()
 
-        logging.info(f"Algoritmo Simulated Annealing concluído. Melhor custo encontrado: {best_cost:.2f}")
+        logging.info(f"Algoritmo Simulated Annealing concluído. Menor custo encontrado: {best_cost:.2f}")
         logging.info(f"Tempo de execução: {end_time - start_time:.2f} segundos")
         logging.info(f"Uso de memória: {peak / 1024 / 1024:.2f} MB")
 

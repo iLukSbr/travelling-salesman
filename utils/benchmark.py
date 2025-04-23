@@ -88,7 +88,7 @@ class Benchmark:
     @staticmethod
     def execute_and_plot(csv_path, n_points, step_sizes, output_dir="benchmark_results"):
         """
-        Executa benchmarks para os algoritmos e gera gráficos diretamente.
+        Executa benchmarks para os algoritmos e gera gráficos comparativos diretamente.
         """
         algorithms = {
             "Têmpera Simulada": SimulatedAnnealing,
@@ -96,39 +96,58 @@ class Benchmark:
         }
 
         points = Benchmark.load_data(csv_path)
-        output_dir = f"{output_dir}/{n_points}_points"  # Adiciona o sufixo "_points" diretamente
+        output_dir = f"{output_dir}"
         os.makedirs(output_dir, exist_ok=True)
+
+        # Armazena os resultados para gráficos comparativos
+        all_results = {}
 
         for algo_name, algo_class in algorithms.items():
             logging.info(f"Executando benchmarks para {algo_name} com {n_points} pontos...")
             algo_instance = algo_class(points, **Benchmark.get_algorithm_params(algo_name))
             results = Benchmark.run_and_collect(algo_instance, step_sizes)
+            all_results[algo_name] = results
 
-            # Gera gráficos para o algoritmo atual
-            step_sizes = [result["step_size"] for result in results]
+        # Gráficos comparativos
+        step_sizes = [result["step_size"] for result in all_results["Têmpera Simulada"]]
+
+        # Gráfico comparativo de tempo de execução
+        plt.figure(figsize=(12, 6))
+        for algo_name, results in all_results.items():
             execution_times = [result["result"]["execution_time"] for result in results]
-            memory_usages = [result["result"]["memory_usage"] for result in results]
-
-            # Gráfico de tempo de execução
-            plt.figure(figsize=(12, 6))
             plt.plot(step_sizes, execution_times, marker="o", label=f"{algo_name}")
-            plt.title(f"Tempo de Execução - {algo_name} ({n_points} pontos)")
-            plt.xlabel("Step Size")
-            plt.ylabel("Tempo de Execução (s)")
-            plt.legend()
-            plt.grid(True)
-            plt.savefig(os.path.join(output_dir, f"{algo_name}_execution_time_{n_points}.png"))
-            plt.close()
+        plt.title(f"Comparação de Tempo de Execução ({n_points} pontos)")
+        plt.xlabel("Step Size")
+        plt.ylabel("Tempo de Execução (s)")
+        plt.legend()
+        plt.grid(True)
+        plt.savefig(os.path.join(output_dir, f"execution_time_comparison_{n_points}.png"))
+        plt.close()
 
-            # Gráfico de uso de memória
-            plt.figure(figsize=(12, 6))
+        # Gráfico comparativo de uso de memória
+        plt.figure(figsize=(12, 6))
+        for algo_name, results in all_results.items():
+            memory_usages = [result["result"]["memory_usage"] for result in results]
             plt.plot(step_sizes, memory_usages, marker="o", label=f"{algo_name}")
-            plt.title(f"Uso de Memória - {algo_name} ({n_points} pontos)")
-            plt.xlabel("Step Size")
-            plt.ylabel("Uso de Memória (MB)")
-            plt.legend()
-            plt.grid(True)
-            plt.savefig(os.path.join(output_dir, f"{algo_name}_memory_usage_{n_points}.png"))
-            plt.close()
+        plt.title(f"Comparação de Uso de Memória ({n_points} pontos)")
+        plt.xlabel("Step Size")
+        plt.ylabel("Uso de Memória (MB)")
+        plt.legend()
+        plt.grid(True)
+        plt.savefig(os.path.join(output_dir, f"memory_usage_comparison_{n_points}.png"))
+        plt.close()
 
-        logging.info(f"Gráficos salvos em: {output_dir}")
+        # Gráfico comparativo de convergência
+        plt.figure(figsize=(12, 6))
+        for algo_name, results in all_results.items():
+            convergence = results[0]["result"]["convergence"]  # Convergência do primeiro step_size
+            plt.plot(range(len(convergence)), convergence, marker="o", label=f"{algo_name}")
+        plt.title(f"Comparação de Convergência ({n_points} pontos)")
+        plt.xlabel("Iterações")
+        plt.ylabel("Custo")
+        plt.legend()
+        plt.grid(True)
+        plt.savefig(os.path.join(output_dir, f"convergence_comparison_{n_points}.png"))
+        plt.close()
+
+        logging.info(f"Gráficos comparativos salvos em: {output_dir}")

@@ -15,10 +15,7 @@ logging.basicConfig(
 )
 
 class Genetic(Algorithm):
-    def __init__(self, cities, pop_size=200, generations=500, mutation_rate=0.02, elitism_size=4, tournament_size=5, use_gpu=True):
-        """
-        Inicializa a classe com as cidades e parâmetros do algoritmo genético.
-        """
+    def __init__(self, cities, pop_size=100, generations=3000, mutation_rate=0.05, elitism_size=4, tournament_size=3, use_gpu=True):
         super().__init__(cities, use_gpu)
         self.pop_size = pop_size
         self.generations = generations
@@ -34,15 +31,16 @@ class Genetic(Algorithm):
         return 1 / self.calculate_total_distance(route, self.dist_matrix)
 
     def _initialize_population(self):
-        """Inicializa a população com uma mistura de rotas heurísticas e aleatórias."""
+        """Inicializa a população com maior diversidade."""
         population = []
-        heuristic_count = self.pop_size // 5
+        heuristic_count = self.pop_size // 10  # Reduzi a proporção de rotas heurísticas
         for _ in range(heuristic_count):
             population.append(self.nearest_neighbor(self.dist_matrix))
         for _ in range(self.pop_size - heuristic_count):
             route = list(range(self.n))
             np.random.shuffle(route)
             population.append(route)
+        logging.info(f"População inicial gerada com {len(population)} indivíduos.")
         return population
 
     def _tournament_selection(self, population, fitnesses):
@@ -57,12 +55,10 @@ class Genetic(Algorithm):
         child = [-1] * size
         mapping = {}
 
-        # Copia segmento do parent1 e constrói o mapeamento
         for i in range(start, end + 1):
             child[i] = parent1[i]
             mapping[parent1[i]] = parent2[i]
 
-        # Preenche posições restantes do parent2, resolvendo conflitos
         for i in range(size):
             if child[i] == -1:
                 candidate = parent2[i]
@@ -71,47 +67,22 @@ class Genetic(Algorithm):
                 child[i] = candidate
         return child
 
-    def _swap_mutation(self, route):
-        """Realiza mutação por troca com probabilidade adaptativa."""
-        route = route.copy()
-        for i in range(self.n):
-            if random.random() < self.mutation_rate:
-                j = random.randint(0, self.n - 1)
-                route[i], route[j] = route[j], route[i]
-        return route
-
-    def _two_opt_local_search(self, route, max_iterations=50):
-        """Aplica busca local 2-opt para melhorar uma rota."""
-        best = np.array(route)
-        best_dist = self.calculate_total_distance(best, self.dist_matrix)
-        for _ in range(max_iterations):
-            improved = False
-            for i in range(1, len(best) - 1):
-                for j in range(i + 1, len(best)):
-                    # Realiza a troca 2-opt
-                    new_route = np.concatenate((best[:i], best[i:j][::-1], best[j:]))
-                    new_dist = self.calculate_total_distance(new_route, self.dist_matrix)
-                    if new_dist < best_dist:
-                        best = new_route
-                        best_dist = new_dist
-                        improved = True
-                        break
-                if improved:
-                    break
-            if not improved:
-                break
-        return best.tolist()
-
     def _parallel_fitness(self, population):
         """Calcula o fitness da população em paralelo."""
         return list(self.executor.map(self._fitness, population))
 
+    def _swap_mutation(self, route, mutation_rate):
+        """Realiza mutação por troca com taxa adaptativa."""
+        route = route.copy()
+        for i in range(self.n):
+            if random.random() < mutation_rate:
+                j = random.randint(0, self.n - 1)
+                route[i], route[j] = route[j], route[i]
+        return route
+
     def solve(self):
         """Executa o algoritmo genético para encontrar a melhor rota TSP."""
-        # Recria o executor para evitar problemas de shutdown
         self.executor = ThreadPoolExecutor(max_workers=self.num_cores)
-
-        # Inicia o rastreamento de memória
         tracemalloc.start()
         start_time = time.time()
 
@@ -121,68 +92,45 @@ class Genetic(Algorithm):
             best_route = population[np.argmax(fitnesses)]
             best_dist = self.calculate_total_distance(best_route, self.dist_matrix)
 
-            logging.info(
-                f"Iniciando algoritmo genético com {self.generations} gerações e população de {self.pop_size} indivíduos.")
-
-            convergence = [best_dist]  # Lista para armazenar os custos ao longo das gerações
-            no_progress_count = 0  # Contador de gerações sem progresso
+            logging.info(f"Iniciando algoritmo genético com {self.generations} gerações e população de {self.pop_size} indivíduos.")
+            convergence = [best_dist]
+            no_progress_count = 0
 
             for gen in range(self.generations):
-                # logging.info(f"Geração {gen + 1}/{self.generations} - Melhor custo até agora: {best_dist:.2f}")
-
-                # Elitismo: preserva as melhores soluções
                 elite_indices = np.argsort(fitnesses)[::-1][:self.elitism_size]
                 new_population = [population[i].copy() for i in elite_indices]
 
-                # Taxa de mutação adaptativa
-                progress = gen / self.generations
-                adaptive_mutation_rate = self.mutation_rate * (1 + progress)
-
-                # Gera nova população
+                adaptive_mutation_rate = self.mutation_rate * (1 + gen / self.generations * 2)  # Aumenta mais rápido
                 while len(new_population) < self.pop_size:
                     parent1 = self._tournament_selection(population, fitnesses)
                     parent2 = self._tournament_selection(population, fitnesses)
                     child = self._pmx_crossover(parent1, parent2)
-                    child = self._swap_mutation(child)
+                    child = self._swap_mutation(child, adaptive_mutation_rate)
                     new_population.append(child)
 
-                # Atualiza população e fitnesses
                 population = new_population[:self.pop_size]
                 fitnesses = self._parallel_fitness(population)
 
-                # Aplica 2-opt ao melhor indivíduo a cada 10 gerações
-                if gen % 10 == 0 or gen == self.generations - 1:
-                    best_idx = np.argmax(fitnesses)
-                    optimized = self._two_opt_local_search(population[best_idx])
-                    opt_dist = self.calculate_total_distance(optimized, self.dist_matrix)
-                    if opt_dist < self.calculate_total_distance(population[best_idx], self.dist_matrix):
-                        population[best_idx] = optimized
-                        fitnesses[best_idx] = self._fitness(optimized)
-
-                # Atualiza a melhor solução
                 current_best_idx = np.argmax(fitnesses)
                 current_best_dist = self.calculate_total_distance(population[current_best_idx], self.dist_matrix)
                 if current_best_dist < best_dist:
                     best_route = population[current_best_idx].copy()
                     best_dist = current_best_dist
-                    no_progress_count = 0  # Reseta o contador ao fazer progresso
+                    no_progress_count = 0
                 else:
-                    no_progress_count += 1  # Incrementa o contador se não houver progresso
+                    no_progress_count += 1
 
-                # Armazena o custo atual para o gráfico de convergência
                 convergence.append(best_dist)
 
-                # Interrompe se mais de 100 gerações sem progresso
-                if no_progress_count > 100:
+                if no_progress_count > 1000:
                     logging.info("Interrompendo devido à falta de progresso.")
                     break
 
-            # Calcula o tempo de execução e o uso de memória
             end_time = time.time()
             current, peak = tracemalloc.get_traced_memory()
             tracemalloc.stop()
 
-            logging.info(f"Algoritmo genético concluído. Melhor custo encontrado: {best_dist:.2f}")
+            logging.info(f"Algoritmo genético concluído. Menor custo encontrado: {best_dist:.2f}")
             logging.info(f"Tempo de execução: {end_time - start_time:.2f} segundos")
             logging.info(f"Uso de memória: {peak / 1024 / 1024:.2f} MB")
 
@@ -194,5 +142,4 @@ class Genetic(Algorithm):
                 "convergence": convergence
             }
         finally:
-            # Encerra o executor no final, garantindo que ele seja liberado
             self.executor.shutdown(wait=True)
