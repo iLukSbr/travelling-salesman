@@ -2,14 +2,20 @@ import numpy as np
 import random
 import math
 from numba import jit
-from algorithms.algorithm import Algorithm
+from .algorithm import Algorithm
+import time
+import tracemalloc
 
 class SimulatedAnnealing(Algorithm):
-    def __init__(self, cities, use_gpu=False):
+    def __init__(self, cities, use_gpu=False, initial_temperature=1000, cooling_rate=0.95, max_iterations=10000, min_temp=1e-3):
         """
-        Inicializa a classe com as cidades e configurações de GPU.
+        Inicializa a classe com as cidades, configurações de GPU e parâmetros do algoritmo.
         """
         super().__init__(cities, use_gpu)
+        self.initial_temperature = initial_temperature
+        self.cooling_rate = cooling_rate
+        self.max_iterations = max_iterations
+        self.min_temp = min_temp
 
     @staticmethod
     @jit(nopython=True)
@@ -86,48 +92,67 @@ class SimulatedAnnealing(Algorithm):
         elif case == 7:  # 3-opt puro
             return dist_matrix[a, e] + dist_matrix[b, f] + dist_matrix[c, d] - dist_matrix[a, b] - dist_matrix[c, d] - dist_matrix[e, f]
 
-    def solve(self, initial_temp=1000, cooling_rate=0.95, max_iterations=10000, min_temp=1e-3):
+    def solve(self):
         """
         Resolve o problema do caixeiro viajante usando Simulated Annealing.
         """
+        # Inicia o rastreamento de memória
+        tracemalloc.start()
+        start_time = time.time()
+
         current_solution = self.nearest_neighbor(self.dist_matrix)
+        current_solution = list(current_solution)  # Garante que seja uma lista
         current_cost = self.calculate_total_distance(current_solution, self.dist_matrix)
         best_solution = current_solution.copy()
         best_cost = current_cost
 
-        temperature = initial_temp
-        for _ in range(max_iterations):
-            if temperature < min_temp:
+        temperature = self.initial_temperature
+        convergence = [best_cost]  # Lista para armazenar os custos ao longo das iterações
+
+        for _ in range(self.max_iterations):
+            if temperature < self.min_temp:  # Temperatura mínima para parar
                 break
 
-            # Escolha aleatória entre 2-opt e 3-opt
-            if random.random() < 0.5:
-                i, j = sorted(random.sample(range(self.n), 2))
-                delta = self.two_opt_delta(current_solution, i, j, self.dist_matrix)
-                if delta < 0 or random.random() < math.exp(-delta / temperature):
-                    current_solution = self.two_opt_swap(current_solution, i, j)
-                    current_cost += delta
-            else:
-                i, j, k = sorted(random.sample(range(self.n), 3))
-                case = random.randint(0, 7)
-                delta = self.three_opt_delta(current_solution, i, j, k, case, self.dist_matrix)
-                if delta < 0 or random.random() < math.exp(-delta / temperature):
-                    current_solution = self.three_opt_swap(current_solution, i, j, k, case)
-                    current_cost += delta
+            # Gera uma nova solução por 2-opt
+            i, j = sorted(random.sample(range(len(current_solution)), 2))
+            if i >= j or j >= len(current_solution):  # Garante que i < j e índices válidos
+                continue
 
+            # Realiza a troca 2-opt
+            new_solution = current_solution[:i] + current_solution[i:j + 1][::-1] + current_solution[j + 1:]
+            new_cost = self.calculate_total_distance(new_solution, self.dist_matrix)
+
+            # Aceita a nova solução com base na probabilidade de aceitação
+            if new_cost < current_cost or random.random() < np.exp((current_cost - new_cost) / temperature):
+                current_solution = new_solution
+                current_cost = new_cost
+
+            # Atualiza a melhor solução encontrada
             if current_cost < best_cost:
                 best_solution = current_solution
                 best_cost = current_cost
 
-            temperature *= cooling_rate
+            # Armazena o custo atual para o gráfico de convergência
+            convergence.append(best_cost)
 
-        return self.format_results(best_solution, best_cost)
+            # Reduz a temperatura
+            temperature *= self.cooling_rate
 
-    def format_results(self, route, cost):
-        """
-        Formata os resultados para o formato unificado.
-        """
+        # Calcula o tempo de execução e o uso de memória
+        end_time = time.time()
+        current, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+
+        print(f"[INFO] Algoritmo Simulated Annealing concluído. Melhor custo encontrado: {best_cost:.2f}")
+        print(f"[INFO] Tempo de execução: {end_time - start_time:.2f} segundos")
+        print(f"[INFO] Uso de memória: {peak / 1024 / 1024:.2f} MB")
+
+        # Retorna os resultados no formato esperado
         return {
-            "route": route,
-            "cost": cost
+            "route": best_solution,
+            "cost": best_cost,
+            "execution_time": end_time - start_time,
+            "memory_usage": peak / 1024 / 1024,
+            "convergence": convergence
         }
+

@@ -99,18 +99,3 @@ class Algorithm(ABC):
         Deve ser implementado pelas subclasses.
         """
         pass
-
-    @abstractmethod
-    def format_results(self, route, cost):
-        """
-        Método abstrato para formatar os resultados.
-        Deve ser implementado pelas subclasses.
-
-        Args:
-            route (list): Rota final.
-            cost (float): Custo da rota.
-
-        Returns:
-            dict: Resultados formatados.
-        """
-        pass

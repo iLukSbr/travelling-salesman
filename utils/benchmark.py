@@ -1,133 +1,154 @@
-import time
-import psutil
-import matplotlib.pyplot as plt
-from utils.point_generator import load_points_from_csv
 import os
+import matplotlib.pyplot as plt
+from .point_generator import PointGenerator
+from algorithms import SimulatedAnnealing, Genetic
 
 class Benchmark:
     @staticmethod
-    def measure_resources(func, *args, **kwargs):
+    def run_benchmarks(algorithm_instance, step_sizes):
         """
-        Mede o tempo de execução, uso de CPU e memória de uma função.
-
-        Args:
-            func (callable): Função a ser executada.
-            *args: Argumentos posicionais para a função.
-            **kwargs: Argumentos nomeados para a função.
-
-        Returns:
-            tuple: Resultado da função e métricas de desempenho.
+        Executa benchmarks para uma instância de algoritmo.
         """
-        cpu_start = psutil.cpu_percent(interval=None)
-        memory_start = psutil.virtual_memory().used / (1024 ** 2)  # Em MB
-        start_time = time.perf_counter()
-
-        result = func(*args, **kwargs)
-
-        end_time = time.perf_counter()
-        cpu_end = psutil.cpu_percent(interval=None)
-        memory_end = psutil.virtual_memory().used / (1024 ** 2)  # Em MB
-
-        metrics = {
-            "time": end_time - start_time,
-            "cpu_usage": cpu_end - cpu_start,
-            "memory_usage": memory_end - memory_start
-        }
-        return result, metrics
+        results = []
+        for step_size in step_sizes:
+            print(f"[INFO] Executando benchmark com step size: {step_size}...")
+            result = algorithm_instance.solve()
+            results.append({
+                "step_size": step_size,
+                "result": result
+            })
+        return results
 
     @staticmethod
-    def benchmark_algorithm(algorithm, cities, **kwargs):
+    def setup_data_directory(base_dir, file_name="tsp_points.csv", n_points=10, limit=1000):
         """
-        Executa o algoritmo e mede tempo, custo e uso de recursos do sistema.
-
-        Args:
-            algorithm (function or class): Função ou classe do algoritmo a ser executado.
-            cities (list): Lista de coordenadas das cidades.
-            **kwargs: Parâmetros adicionais para o algoritmo.
-
-        Returns:
-            dict: Resultados contendo melhor rota, custo, tempo de execução e uso de recursos.
+        Configura o diretório de dados e gera o arquivo CSV com pontos, se necessário.
         """
-        if callable(algorithm):
-            func = algorithm
-        else:
-            func = lambda cities, **kwargs: algorithm(cities, **kwargs).solve()
+        data_dir = os.path.join(base_dir, "data")
+        os.makedirs(data_dir, exist_ok=True)
+        csv_path = os.path.join(data_dir, file_name)
 
-        (best_route, best_cost), metrics = Benchmark.measure_resources(func, cities, **kwargs)
-        return {
-            "route": best_route,
-            "cost": best_cost,
-            **metrics
-        }
+        if not os.path.exists(csv_path):
+            print("[INFO] Gerando arquivo CSV com pontos aleatórios...")
+            PointGenerator.generate_random_points_csv(csv_path, n=n_points, limit=limit)
+            print(f"[INFO] Arquivo CSV gerado em: {csv_path}")
+        return csv_path
 
     @staticmethod
-    def run_benchmarks(algorithms, csv_path, step_sizes, **kwargs):
+    def load_data(csv_path):
         """
-        Executa benchmarks para diferentes algoritmos e tamanhos de entrada.
-
-        Args:
-            algorithms (dict): Dicionário com nomes e funções/classes dos algoritmos.
-            csv_path (str): Caminho para o arquivo CSV com os dados.
-            step_sizes (list): Lista de tamanhos de entrada para os benchmarks.
-            **kwargs: Parâmetros adicionais para os algoritmos.
-
-        Returns:
-            dict: Resultados contendo custo, tempo, uso de recursos e tamanho da entrada para cada algoritmo.
+        Carrega os pontos do arquivo CSV.
         """
-        points = load_points_from_csv(csv_path)
-        max_points = len(points)
+        print("[INFO] Carregando pontos do arquivo CSV...")
+        points = PointGenerator.load_points_from_csv(csv_path)
+        print(f"[INFO] {len(points)} pontos carregados.")
+        return points
+
+    @staticmethod
+    def get_algorithm_params(algorithm_name):
+        """
+        Retorna os parâmetros específicos para cada algoritmo.
+        """
+        if algorithm_name == "Têmpera Simulada":
+            return {
+                "initial_temperature": 1000,
+                "cooling_rate": 0.95,
+                "max_iterations": 1000
+            }
+        elif algorithm_name == "Algoritmo Genético":
+            return {
+                "pop_size": 100,
+                "generations": 500,
+                "mutation_rate": 0.02,
+                "elitism_size": 5,
+                "tournament_size": 5
+            }
+        return {}
+
+    @staticmethod
+    def execute_benchmarks(csv_path, step_sizes):
+        """
+        Executa benchmarks para os algoritmos e retorna os resultados.
+        """
+        algorithms = {
+            "Têmpera Simulada": SimulatedAnnealing,
+            "Algoritmo Genético": Genetic
+        }
+
+        points = Benchmark.load_data(csv_path)
+
         all_results = {}
+        for algo_name, algo_class in algorithms.items():
+            print(f"[INFO] Executando benchmarks para {algo_name}...")
 
-        for algo_name, algorithm in algorithms.items():
-            print(f"[INFO] Executando benchmarks para o algoritmo: {algo_name}")
-            results = []
+            # Cria uma instância do algoritmo com os parâmetros necessários
+            algo_instance = algo_class(points, **Benchmark.get_algorithm_params(algo_name))
 
-            for size in step_sizes:
-                if size > max_points:
-                    print(f"Tamanho {size} excede o número máximo de pontos ({max_points}). Ignorando.")
-                    continue
-
-                print(f"Executando benchmark para {size} pontos...")
-                subset = points[:size]
-                result = Benchmark.benchmark_algorithm(algorithm, subset, **kwargs)
-                result["size"] = size
-                results.append(result)
-
-                print(f"Concluído: {size} pontos - Custo: {result['cost']:.6f}, "
-                      f"Tempo: {result['time']:.6f}s, CPU: {result['cpu_usage']:.2f}%, "
-                      f"Memória: {result['memory_usage']:.2f}MB")
-
+            results = Benchmark.run_benchmarks(
+                algo_instance,  # Passa a instância do algoritmo
+                step_sizes
+            )
             all_results[algo_name] = results
-
         return all_results
 
     @staticmethod
-    def plot_benchmark_results(all_results, output_dir="benchmark_results"):
+    def generate_results_plots(all_results):
         """
-        Gera gráficos de desempenho com base nos resultados do benchmark e salva em arquivos.
+        Gera gráficos de desempenho com base nos resultados dos benchmarks.
+        """
+        print("[INFO] Gerando gráficos de resultados...")
+        Benchmark.plot_comparative_results(all_results, output_dir="benchmark_results")
 
-        Args:
-            all_results (dict): Resultados do benchmark para cada algoritmo.
-            output_dir (str): Diretório onde os gráficos serão salvos.
+    def plot_comparative_results(all_results, output_dir="benchmark_results"):
+        """
+        Gera gráficos comparativos entre os algoritmos com base em tempo, memória e convergência.
         """
         os.makedirs(output_dir, exist_ok=True)
 
-        for algo_name, results in all_results.items():
-            sizes = [result["size"] for result in results]
-            metrics = {
-                "Tempo de Execução (s)": [result["time"] for result in results],
-                "Custo da Solução": [result["cost"] for result in results],
-                "Uso de CPU (%)": [result["cpu_usage"] for result in results],
-                "Uso de Memória (MB)": [result["memory_usage"] for result in results]
-            }
+        # Gráfico de tempo de execução e uso de memória
+        algorithms = list(all_results.keys())
+        step_sizes = [result["step_size"] for result in all_results[algorithms[0]]]
+        execution_times = {algo: [result["result"]["execution_time"] for result in results] for algo, results in
+                           all_results.items()}
+        memory_usages = {algo: [result["result"]["memory_usage"] for result in results] for algo, results in
+                         all_results.items()}
 
-            for metric_name, values in metrics.items():
-                plt.figure(figsize=(12, 6))
-                plt.plot(sizes, values, marker='o', label=metric_name)
-                plt.title(f"{metric_name} - {algo_name}")
-                plt.xlabel("Tamanho da Entrada (número de pontos)")
-                plt.ylabel(metric_name)
-                plt.grid(True)
-                plt.legend()
-                plt.savefig(os.path.join(output_dir, f"{algo_name}_{metric_name.replace(' ', '_').lower()}.png"))
-                plt.close()
+        # Gráfico comparativo de tempo de execução e uso de memória
+        plt.figure(figsize=(12, 6))
+        for algo in algorithms:
+            plt.plot(step_sizes, execution_times[algo], marker="o", label=f"{algo} - Tempo de Execução")
+        plt.title("Comparação de Tempo de Execução")
+        plt.xlabel("Step Size")
+        plt.ylabel("Tempo de Execução (s)")
+        plt.legend()
+        plt.grid(True)
+        plt.savefig(os.path.join(output_dir, "execution_time_comparison.png"))
+        plt.close()
+
+        plt.figure(figsize=(12, 6))
+        for algo in algorithms:
+            plt.plot(step_sizes, memory_usages[algo], marker="o", label=f"{algo} - Uso de Memória")
+        plt.title("Comparação de Uso de Memória")
+        plt.xlabel("Step Size")
+        plt.ylabel("Uso de Memória (MB)")
+        plt.legend()
+        plt.grid(True)
+        plt.savefig(os.path.join(output_dir, "memory_usage_comparison.png"))
+        plt.close()
+
+        # Gráfico comparativo de convergência
+        plt.figure(figsize=(12, 6))
+        for algo in algorithms:
+            for step_size in step_sizes:
+                convergence = next(
+                    result["result"]["convergence"] for result in all_results[algo] if result["step_size"] == step_size)
+                plt.plot(range(len(convergence)), convergence, label=f"{algo} - Step Size {step_size}")
+        plt.title("Comparação de Convergência")
+        plt.xlabel("Iterações")
+        plt.ylabel("Custo")
+        plt.legend()
+        plt.grid(True)
+        plt.savefig(os.path.join(output_dir, "convergence_comparison.png"))
+        plt.close()
+
+        print(f"[INFO] Gráficos comparativos salvos em: {output_dir}")

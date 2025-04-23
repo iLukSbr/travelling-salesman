@@ -1,10 +1,12 @@
 import numpy as np
 import random
 from concurrent.futures import ThreadPoolExecutor
-from algorithms.algorithm import Algorithm
+from .algorithm import Algorithm
+import time
+import tracemalloc
 
 class Genetic(Algorithm):
-    def __init__(self, cities, pop_size=200, generations=500, mutation_rate=0.02, elitism_size=4, tournament_size=5, use_gpu=False):
+    def __init__(self, cities, pop_size=200, generations=500, mutation_rate=0.02, elitism_size=4, tournament_size=5, use_gpu=True):
         """
         Inicializa a classe com as cidades e parâmetros do algoritmo genético.
         """
@@ -69,13 +71,14 @@ class Genetic(Algorithm):
 
     def _two_opt_local_search(self, route, max_iterations=50):
         """Aplica busca local 2-opt para melhorar uma rota."""
-        best = route.copy()
+        best = np.array(route)
         best_dist = self.calculate_total_distance(best, self.dist_matrix)
         for _ in range(max_iterations):
             improved = False
-            for i in range(1, self.n - 1):
-                for j in range(i + 1, self.n):
-                    new_route = best[:i] + best[i:j][::-1] + best[j:]
+            for i in range(1, len(best) - 1):
+                for j in range(i + 1, len(best)):
+                    # Realiza a troca 2-opt
+                    new_route = np.concatenate((best[:i], best[i:j][::-1], best[j:]))
                     new_dist = self.calculate_total_distance(new_route, self.dist_matrix)
                     if new_dist < best_dist:
                         best = new_route
@@ -86,64 +89,91 @@ class Genetic(Algorithm):
                     break
             if not improved:
                 break
-        return best
+        return best.tolist()
 
     def _parallel_fitness(self, population):
         """Calcula o fitness da população em paralelo."""
-        with self.executor as executor:
-            return list(executor.map(self._fitness, population))
+        return list(self.executor.map(self._fitness, population))
 
     def solve(self):
         """Executa o algoritmo genético para encontrar a melhor rota TSP."""
-        population = self._initialize_population()
-        fitnesses = self._parallel_fitness(population)
-        best_route = population[np.argmax(fitnesses)]
-        best_dist = self.calculate_total_distance(best_route, self.dist_matrix)
+        # Recria o executor para evitar problemas de shutdown
+        self.executor = ThreadPoolExecutor(max_workers=4)
 
-        for gen in range(self.generations):
-            # Elitismo: preserva as melhores soluções
-            elite_indices = np.argsort(fitnesses)[::-1][:self.elitism_size]
-            new_population = [population[i].copy() for i in elite_indices]
+        # Inicia o rastreamento de memória
+        tracemalloc.start()
+        start_time = time.time()
 
-            # Taxa de mutação adaptativa
-            progress = gen / self.generations
-            self.mutation_rate *= (1 + progress)
-
-            # Gera nova população
-            while len(new_population) < self.pop_size:
-                parent1 = self._tournament_selection(population, fitnesses)
-                parent2 = self._tournament_selection(population, fitnesses)
-                child = self._pmx_crossover(parent1, parent2)
-                child = self._swap_mutation(child)
-                new_population.append(child)
-
-            # Atualiza população e fitnesses
-            population = new_population[:self.pop_size]
+        try:
+            population = self._initialize_population()
             fitnesses = self._parallel_fitness(population)
+            best_route = population[np.argmax(fitnesses)]
+            best_dist = self.calculate_total_distance(best_route, self.dist_matrix)
 
-            # Aplica 2-opt ao melhor indivíduo a cada 10 gerações
-            if gen % 10 == 0 or gen == self.generations - 1:
-                best_idx = np.argmax(fitnesses)
-                optimized = self._two_opt_local_search(population[best_idx])
-                opt_dist = self.calculate_total_distance(optimized, self.dist_matrix)
-                if opt_dist < self.calculate_total_distance(population[best_idx], self.dist_matrix):
-                    population[best_idx] = optimized
-                    fitnesses[best_idx] = self._fitness(optimized)
+            print(
+                f"[INFO] Iniciando algoritmo genético com {self.generations} gerações e população de {self.pop_size} indivíduos.")
 
-            # Atualiza a melhor solução
-            current_best_idx = np.argmax(fitnesses)
-            current_best_dist = self.calculate_total_distance(population[current_best_idx], self.dist_matrix)
-            if current_best_dist < best_dist:
-                best_route = population[current_best_idx].copy()
-                best_dist = current_best_dist
+            convergence = [best_dist]  # Lista para armazenar os custos ao longo das gerações
 
-        return self.format_results(best_route, best_dist)
+            for gen in range(self.generations):
+                print(f"[INFO] Geração {gen + 1}/{self.generations} - Melhor custo até agora: {best_dist:.2f}")
 
-    def format_results(self, route, cost):
-        """
-        Formata os resultados para o formato unificado.
-        """
-        return {
-            "route": route,
-            "cost": cost
-        }
+                # Elitismo: preserva as melhores soluções
+                elite_indices = np.argsort(fitnesses)[::-1][:self.elitism_size]
+                new_population = [population[i].copy() for i in elite_indices]
+
+                # Taxa de mutação adaptativa
+                progress = gen / self.generations
+                adaptive_mutation_rate = self.mutation_rate * (1 + progress)
+
+                # Gera nova população
+                while len(new_population) < self.pop_size:
+                    parent1 = self._tournament_selection(population, fitnesses)
+                    parent2 = self._tournament_selection(population, fitnesses)
+                    child = self._pmx_crossover(parent1, parent2)
+                    child = self._swap_mutation(child)
+                    new_population.append(child)
+
+                # Atualiza população e fitnesses
+                population = new_population[:self.pop_size]
+                fitnesses = self._parallel_fitness(population)
+
+                # Aplica 2-opt ao melhor indivíduo a cada 10 gerações
+                if gen % 10 == 0 or gen == self.generations - 1:
+                    best_idx = np.argmax(fitnesses)
+                    optimized = self._two_opt_local_search(population[best_idx])
+                    opt_dist = self.calculate_total_distance(optimized, self.dist_matrix)
+                    if opt_dist < self.calculate_total_distance(population[best_idx], self.dist_matrix):
+                        population[best_idx] = optimized
+                        fitnesses[best_idx] = self._fitness(optimized)
+
+                # Atualiza a melhor solução
+                current_best_idx = np.argmax(fitnesses)
+                current_best_dist = self.calculate_total_distance(population[current_best_idx], self.dist_matrix)
+                if current_best_dist < best_dist:
+                    best_route = population[current_best_idx].copy()
+                    best_dist = current_best_dist
+
+                # Armazena o custo atual para o gráfico de convergência
+                convergence.append(best_dist)
+
+            # Calcula o tempo de execução e o uso de memória
+            end_time = time.time()
+            current, peak = tracemalloc.get_traced_memory()
+            tracemalloc.stop()
+
+            print(f"[INFO] Algoritmo genético concluído. Melhor custo encontrado: {best_dist:.2f}")
+            print(f"[INFO] Tempo de execução: {end_time - start_time:.2f} segundos")
+            print(f"[INFO] Uso de memória: {peak / 1024 / 1024:.2f} MB")
+
+            return {
+                "route": best_route,
+                "cost": best_dist,
+                "execution_time": end_time - start_time,
+                "memory_usage": peak / 1024 / 1024,
+                "convergence": convergence
+            }
+        finally:
+            # Encerra o executor no final, garantindo que ele seja liberado
+            self.executor.shutdown(wait=True)
+
