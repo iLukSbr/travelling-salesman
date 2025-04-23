@@ -197,16 +197,16 @@ AG & \(\mathcal{O}(\text{população} \cdot n \cdot \text{gerações})\) & Boa p
 \end{table}
 
 \section{Resultados}
-Os resultados experimentais foram obtidos em cada etapa da metodologia, com detalhes fornecidos nos apêndices.
+Os resultados experimentais estão em forma de gráficos, disponíveis no repositório GitHub, link no Apêndice~\ref{app:code}. Observou-se que a busca local AG converge rapidamente, porém acaba parando em um mínimo local. Já a têmpera simulada demora mais para começar a convergir, mas quando acontece, encontra soluções de menor custo quando comparada ao AG.
 
 \subsection{Etapa 1: Pré-processamento e Inicialização}
 \begin{itemize}
     \item \textbf{Descrição}: Calculou-se a matriz de distâncias usando NumPy ou CuPy. A solução inicial foi gerada pelo algoritmo do vizinho mais próximo.
 \end{itemize}
 
-\subsection{Etapa 2: Execução do SA}
+\subsection{Etapa 2: Execução}
 \begin{itemize}
-    \item \textbf{Descrição}: Executou-se o SA com temperatura inicial adaptativa, resfriamento geométrico ajustado dinamicamente, e movimentos de vizinhança (60\% 2-opt, 30\% 3-opt em temperaturas altas, 10\% trocas enviesadas).
+    \item \textbf{Descrição}: Foi realizada tentativa e erro manual nos parâmetros dos algoritmos, para encontrar a solução gráfica que convergiu mais rapidamente para o melhor custo.
 \end{itemize}
 
 \section{Conclusão}

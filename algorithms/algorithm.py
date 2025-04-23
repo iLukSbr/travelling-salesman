@@ -19,10 +19,30 @@ class Algorithm(ABC):
         """
         if not cities:
             raise ValueError("A lista de cidades não pode estar vazia.")
-        self.cities = np.array(cities)
+        self.cities = self.normalize_coordinates(np.array(cities))
         self.n = len(cities)
         self.use_gpu = use_gpu
         self.dist_matrix = self.compute_distance_matrix()
+
+    @staticmethod
+    def normalize_coordinates(cities):
+        """
+        Normaliza as coordenadas para garantir que todas sejam positivas.
+
+        Args:
+            cities (np.ndarray): Array de coordenadas [(x1, y1), (x2, y2), ...].
+
+        Returns:
+            np.ndarray: Array de coordenadas normalizadas.
+        """
+        min_x = np.min(cities[:, 0])
+        min_y = np.min(cities[:, 1])
+        normalized_cities = cities - [min_x, min_y]
+
+        # Log para verificar os valores normalizados
+        # print("Coordenadas normalizadas:\n", normalized_cities)
+
+        return normalized_cities
 
     def compute_distance_matrix(self):
         """
@@ -32,8 +52,18 @@ class Algorithm(ABC):
             np.ndarray: Matriz de distâncias.
         """
         if self.use_gpu and GPU_AVAILABLE:
-            return self._compute_distance_matrix_gpu()
-        return self._compute_distance_matrix_cpu()
+            dist_matrix = self._compute_distance_matrix_gpu()
+        else:
+            dist_matrix = self._compute_distance_matrix_cpu()
+
+        # Garantir que a matriz seja simétrica
+        if not np.allclose(dist_matrix, dist_matrix.T):
+            raise ValueError("A matriz de distâncias não é simétrica.")
+
+        # Log para verificar os valores da matriz
+        # print("Matriz de distâncias:\n", dist_matrix)
+
+        return dist_matrix
 
     def _compute_distance_matrix_cpu(self):
         """Calcula a matriz de distâncias usando a CPU."""
@@ -67,6 +97,11 @@ class Algorithm(ABC):
         for i in range(n - 1):
             total += dist_matrix[route[i], route[i + 1]]
         total += dist_matrix[route[n - 1], route[0]]
+
+        # Validação para custos negativos
+        if total < 0:
+            raise ValueError(f"Custo total negativo detectado: {total}")
+
         return total
 
     @staticmethod

@@ -15,7 +15,7 @@ logging.basicConfig(
 )
 
 class Genetic(Algorithm):
-    def __init__(self, cities, pop_size=100, generations=3000, mutation_rate=0.05, elitism_size=4, tournament_size=3, use_gpu=True):
+    def __init__(self, cities, pop_size=100, generations=3000, mutation_rate=0.05, elitism_size=4, tournament_size=3, use_gpu=True, max_stalled_epochs=1000):
         super().__init__(cities, use_gpu)
         self.pop_size = pop_size
         self.generations = generations
@@ -25,6 +25,7 @@ class Genetic(Algorithm):
         self.num_cores = os.cpu_count()
         logging.info(f"Número de núcleos disponíveis no CPU: {self.num_cores}")
         self.executor = ThreadPoolExecutor(max_workers=self.num_cores)
+        self.max_stalled_epochs = max_stalled_epochs
 
     def _fitness(self, route):
         """Fitness é o inverso da distância total."""
@@ -122,7 +123,7 @@ class Genetic(Algorithm):
 
                 convergence.append(best_dist)
 
-                if no_progress_count > 1000:
+                if no_progress_count > self.max_stalled_epochs:
                     logging.info("Interrompendo devido à falta de progresso.")
                     break
 

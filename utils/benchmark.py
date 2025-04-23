@@ -2,7 +2,7 @@ import logging
 import os
 import matplotlib.pyplot as plt
 from .point_generator import PointGenerator
-from algorithms import SimulatedAnnealing, Genetic
+from algorithms import SimulatedAnnealing, Genetic, BlindSearch, InformedSearch
 
 # Configuração do logger
 logging.basicConfig(
@@ -71,32 +71,37 @@ class Benchmark:
         """
         params = {
             "Têmpera Simulada": {
+                "use_gpu": True,
                 "initial_temperature": 1000,
-                "cooling_rate": 0.95,
-                "max_iterations": 1000
+                "cooling_rate": 0.999,
+                "max_iterations": 8000,
+                "min_temp": 1e-3,
+                "max_stalled_epochs": 3000
             },
             "Algoritmo Genético": {
                 "pop_size": 100,
-                "generations": 500,
-                "mutation_rate": 0.02,
-                "elitism_size": 5,
-                "tournament_size": 5
+                "generations": 8000,
+                "mutation_rate": 0.05,
+                "elitism_size": 1,
+                "tournament_size": 1,
+                "use_gpu": True,
+                "max_stalled_epochs": 5000
             }
         }
         return params.get(algorithm_name, {})
 
-    @staticmethod
     def execute_and_plot(csv_path, n_points, step_sizes, output_dir="benchmark_results"):
         """
         Executa benchmarks para os algoritmos e gera gráficos comparativos diretamente.
         """
         algorithms = {
             "Têmpera Simulada": SimulatedAnnealing,
-            "Algoritmo Genético": Genetic
+            "Algoritmo Genético": Genetic,
+            # "Busca Cega": BlindSearch,
+            # "Busca Informada": InformedSearch
         }
 
         points = Benchmark.load_data(csv_path)
-        output_dir = f"{output_dir}"
         os.makedirs(output_dir, exist_ok=True)
 
         # Armazena os resultados para gráficos comparativos
@@ -104,50 +109,49 @@ class Benchmark:
 
         for algo_name, algo_class in algorithms.items():
             logging.info(f"Executando benchmarks para {algo_name} com {n_points} pontos...")
+
+            # Instancia o algoritmo
             algo_instance = algo_class(points, **Benchmark.get_algorithm_params(algo_name))
-            results = Benchmark.run_and_collect(algo_instance, step_sizes)
-            all_results[algo_name] = results
 
-        # Gráficos comparativos
-        step_sizes = [result["step_size"] for result in all_results["Têmpera Simulada"]]
+            # Executa apenas uma vez para buscas cega e informada
+            if algo_name in ["Busca Cega", "Busca Informada"]:
+                result = algo_instance.solve()
+                all_results[algo_name] = [{
+                    "step_size": None,
+                    "result": result
+                }]
+            else:
+                # Executa para cada step_size nos outros algoritmos
+                results = Benchmark.run_and_collect(algo_instance, step_sizes)
+                all_results[algo_name] = results
 
-        # Gráfico comparativo de tempo de execução
+        # Gráficos comparativos por step_size
+        for step_size in step_sizes:
+            plt.figure(figsize=(12, 6))
+            for algo_name, results in all_results.items():
+                if algo_name in ["Busca Cega", "Busca Informada"]:
+                    continue  # Ignora buscas cega e informada para gráficos por step_size
+                result = next(r for r in results if r["step_size"] == step_size)
+                convergence = result["result"]["convergence"]
+                plt.plot(range(len(convergence)), convergence, label=f"{algo_name}")
+
+            plt.title(f"Comparação de Convergência ({n_points} pontos) - Step Size {step_size}")
+            plt.xlabel("Iterações")
+            plt.ylabel("Custo")
+            plt.legend()
+            plt.grid(True)
+            plt.savefig(os.path.join(output_dir, f"convergence_comparison_{n_points}_step_size_{step_size}.png"))
+            plt.close()
+
+        # Gráfico comparativo de custo final (inclui buscas cega e informada)
         plt.figure(figsize=(12, 6))
         for algo_name, results in all_results.items():
-            execution_times = [result["result"]["execution_time"] for result in results]
-            plt.plot(step_sizes, execution_times, marker="o", label=f"{algo_name}")
-        plt.title(f"Comparação de Tempo de Execução ({n_points} pontos)")
-        plt.xlabel("Step Size")
-        plt.ylabel("Tempo de Execução (s)")
-        plt.legend()
-        plt.grid(True)
-        plt.savefig(os.path.join(output_dir, f"execution_time_comparison_{n_points}.png"))
-        plt.close()
-
-        # Gráfico comparativo de uso de memória
-        plt.figure(figsize=(12, 6))
-        for algo_name, results in all_results.items():
-            memory_usages = [result["result"]["memory_usage"] for result in results]
-            plt.plot(step_sizes, memory_usages, marker="o", label=f"{algo_name}")
-        plt.title(f"Comparação de Uso de Memória ({n_points} pontos)")
-        plt.xlabel("Step Size")
-        plt.ylabel("Uso de Memória (MB)")
-        plt.legend()
-        plt.grid(True)
-        plt.savefig(os.path.join(output_dir, f"memory_usage_comparison_{n_points}.png"))
-        plt.close()
-
-        # Gráfico comparativo de convergência
-        plt.figure(figsize=(12, 6))
-        for algo_name, results in all_results.items():
-            convergence = results[0]["result"]["convergence"]  # Convergência do primeiro step_size
-            plt.plot(range(len(convergence)), convergence, marker="o", label=f"{algo_name}")
-        plt.title(f"Comparação de Convergência ({n_points} pontos)")
-        plt.xlabel("Iterações")
+            final_costs = [result["result"]["cost"] for result in results]
+            plt.bar(algo_name, final_costs[0] if algo_name in ["Busca Cega", "Busca Informada"] else min(final_costs))
+        plt.title(f"Comparação de Custo Final ({n_points} pontos)")
         plt.ylabel("Custo")
-        plt.legend()
-        plt.grid(True)
-        plt.savefig(os.path.join(output_dir, f"convergence_comparison_{n_points}.png"))
+        plt.grid(True, axis="y")
+        plt.savefig(os.path.join(output_dir, f"final_cost_comparison_{n_points}.png"))
         plt.close()
 
         logging.info(f"Gráficos comparativos salvos em: {output_dir}")

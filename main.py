@@ -14,8 +14,8 @@ class Main:
     def main():
         # Configuração inicial
         base_dir = os.path.dirname(os.path.abspath(__file__))
-        point_quantities = [50, 100, 200, 500, 1000, 2000]  # Quantidades variadas de pontos
-        step_sizes = [1, 10, 50] # Tamanhos de passo para os algoritmos
+        point_quantities = [50, 100, 1000, 5000]  # Quantidades variadas de pontos
+        step_sizes = [1, 5, 10, 50] # Tamanhos de passo para os algoritmos
 
         # Gera arquivos CSV para diferentes quantidades de pontos
         logging.info("Configurando diretórios de dados e gerando arquivos CSV...")
