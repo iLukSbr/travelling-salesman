@@ -1,0 +1,285 @@
+\documentclass[12pt]{article}
+\usepackage{sbc-template}
+\usepackage{graphicx,url}
+\usepackage[utf8]{inputenc}
+\usepackage[brazil]{babel}
+\usepackage{amsmath,amssymb}
+\usepackage{newtxtext}
+\usepackage{lmodern}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{indentfirst}
+\usepackage{hyperref}
+\sloppy
+
+\title{Modelagem Computacional do Problema do Caixeiro Viajante com Têmpera Simulada e Algoritmo Genético}
+
+\author{Lucas Yukio Fukuda Matsumoto\inst{1}}
+
+\address{Engenharia de Computação -- CSI30 S73 Sistemas Inteligentes\\
+Universidade Tecnológica Federal do Paraná (UTFPR) -- Curitiba -- PR -- Brazil\\
+  \email{lucmat@alunos.utfpr.edu.br}}
+
+\begin{document}
+
+\maketitle
+
+\begin{resumo}
+Este artigo apresenta a modelagem computacional do Problema do Caixeiro Viajante (TSP) utilizando Têmpera Simulada (SA) e Algoritmo Genético (AG). Ambos são formalmente definidos, e as metodologias são detalhadas, incluindo equações e teorias fundamentais. As implementações em Python são descritas, com foco em aspectos como paralelização e busca local. Uma comparação detalhada com as técnicas de busca cega e informada é realizada, destacando as vantagens e limitações de cada abordagem. Resultados experimentais com instâncias TSPLIB mostram que a SA converge rapidamente para instâncias menores, enquanto o AG oferece melhor escalabilidade para problemas maiores. O artigo conclui enfatizando o equilíbrio entre eficiência e qualidade das soluções oferecido pelas meta-heurísticas.
+\end{resumo}
+
+\begin{abstract}
+This paper presents the computational modeling of the Traveling Salesman Problem (TSP) using Simulated Annealing (SA) and Genetic Algorithm (GA). Both are formally defined, and the methodologies are detailed, including fundamental equations and theories. The Python implementations are described, focusing on aspects such as parallelization and local search. A detailed comparison with blind and informed search techniques is provided, highlighting the advantages and limitations of each approach. Experimental results with TSPLIB instances show that SA converges quickly for smaller instances, while GA offers better scalability for larger problems. The paper concludes by emphasizing the balance between efficiency and solution quality provided by metaheuristics.
+\end{abstract}
+
+\section{Introdução}
+O Problema do Caixeiro Viajante (TSP) é um problema clássico de otimização combinatória, classificado como NP-difícil, com aplicações em logística, planejamento de rotas e design de redes \cite{applegate2006}. O objetivo é encontrar a rota de menor distância que visita cada uma de \(n\) cidades exatamente uma vez e retorna à cidade inicial. Devido à sua complexidade, métodos exatos, como programação inteira, tornam-se inviáveis para instâncias grandes, motivando o uso de meta-heurísticas como Têmpera Simulada (SA) e Algoritmo Genético (AG).
+
+\section{Definição Formal do Problema}
+O TSP é definido em um grafo completo não direcionado \(G = \left(V, E\right)\), onde \(V = \{v_1, v_2, \ldots, v_n\}\) representa o conjunto de \(n\) cidades, e \(E\) contém as arestas com pesos \(d\left(v_i, v_j\right)\) correspondentes às distâncias entre cidades \(v_i\) e \(v_j\). O objetivo é encontrar uma permutação \(\pi = \left[\pi_1, \pi_2, \ldots, \pi_n\right]\) dos índices das cidades que minimize o custo total da rota:
+
+\[
+\text{Custo }(\pi) = \sum_{i=1}^{n-1} d\left(\pi_i, \pi_{i+1}\right) + d\left(\pi_n, \pi_1\right),
+\]
+
+sujeito à restrição de que cada cidade seja visitada exatamente uma vez \cite{nilsson1982}. Neste trabalho, as distâncias são euclidianas, calculadas como:
+
+\[
+d\left(v_i, v_j\right) = \sqrt{\left(x_i - x_j\right)^2 + \left(y_i - y_j\right)^2},
+\]
+
+onde \(\left(x_i, y_i\right)\) são as coordenadas cartesianas da cidade \(v_i\). Alternativamente, o TSP pode ser formulado como um problema de programação inteira:
+
+\[
+\min \sum_{i \neq j} d_{ij} x_{ij},
+\]
+
+sujeito a:
+
+\[
+x_{ij} \in \{0,1\}, \quad \sum_{j \neq i} x_{ij} = 1, \quad \sum_{i \neq j} x_{ij} = 1,
+\]
+
+e restrições de subtour para garantir um único ciclo hamiltoniano \cite{orman2006}.
+
+\section{Têmpera Simulada}
+
+A Têmpera Simulada (Simulated Annealing, SA) é uma meta-heurística inspirada no processo físico de recozimento de metais, no qual um material é aquecido a uma temperatura elevada e, em seguida, resfriado lentamente para minimizar defeitos e alcançar uma estrutura mais estável. No contexto da otimização combinatória, a Têmpera Simulada é utilizada para encontrar soluções aproximadas para problemas complexos, como o Problema do Caixeiro Viajante (TSP).
+
+O algoritmo de Têmpera Simulada busca soluções explorando o espaço de busca de forma estocástica, permitindo, em certas condições, a aceitação de soluções piores para escapar de mínimos locais. Isso é controlado por uma variável chamada temperatura (\(T\)), que diminui gradualmente ao longo do tempo, reduzindo a probabilidade de aceitar soluções piores à medida que o algoritmo converge.
+
+\subsection{Domínio do Problema}
+O TSP é modelado como um problema euclidiano bidimensional, onde cada cidade é representada por coordenadas cartesianas \((x, y)\), e a distância entre cidades é calculada pela distância euclidiana. 
+
+\textbf{Justificativa:} A escolha do TSP euclidiano é motivada pela sua relevância em aplicações práticas, como logística, roteamento de veículos e planejamento de circuitos eletrônicos. A métrica euclidiana é amplamente utilizada em benchmarks padrão (e.g., TSPLIB \cite{reinelt1991tsplib}), facilitando comparações com outros algoritmos. A natureza NP-difícil do problema justifica a adoção de meta-heurísticas, como a têmpera simulada, que oferecem soluções aproximadas de alta qualidade em tempo computacional razoável \cite{kirkpatrick1983optimization}.
+
+\subsection{Modelagem}
+O TSP foi modelado como um grafo completo não direcionado \(G = (V, E)\), onde \(V\) é o conjunto de \(n\) vértices (cidades) e \(E\) é o conjunto de arestas com pesos representando as distâncias euclidianas entre pares de cidades. A solução é representada como uma permutação dos índices das cidades (uma sequência \(\pi = [\pi_1, \pi_2, \ldots, \pi_n]\)), com o custo da rota dado por:
+
+\[
+\text{Custo}(\pi) = \sum_{i=1}^{n-1} d\left(\pi_i, \pi_{i+1}\right) + d\left(\pi_n, \pi_1\right),
+\]
+
+onde \(d\left(u, v\right) = \sqrt{\left(x_u - x_v\right)^2 + \left(y_u - y_v\right)^2}\) é a distância euclidiana entre as cidades \(u\) e \(v\).
+
+O algoritmo de têmpera simulada utiliza uma abordagem iterativa que combina exploração global (aceitação de soluções piores com probabilidade dependente da temperatura) e exploração local (movimentos de vizinhança como 2-opt, 3-opt e trocas enviesadas). A temperatura inicial, o cronograma de resfriamento adaptativo e os mecanismos de reaquecimento foram projetados para equilibrar exploração e explotação.
+
+\textbf{Justificativa:} A modelagem como grafo completo é padrão para o TSP, pois captura todas as conexões possíveis entre cidades, permitindo a aplicação de heurísticas de vizinhança eficientes. O algoritmo de têmpera simulada possui robustez em problemas de otimização combinatória, conforme demonstrado em \cite{cerny1985thermodynamical}, e capacidade de escapar de ótimos locais por meio de aceitações estocásticas. A inclusão de 2-opt e 3-opt é justificada por sua eficácia em melhorar soluções locais \cite{lin1973effective}, enquanto as trocas enviesadas aumentam a probabilidade de selecionar movimentos promissores, reduzindo o erro médio em instâncias de benchmark.
+
+\subsection{Representação Computacional}
+A representação computacional adota as seguintes estruturas:
+\begin{itemize}
+    \item \textbf{Cidades}: Uma lista de coordenadas \([(x_1, y_1), (x_2, y_2), \ldots, (x_n, y_n)]\), armazenada como um array NumPy para eficiência.
+    \item \textbf{Matriz de Distâncias}: Uma matriz \(n \times n\) pré-calculada, contendo as distâncias euclidianas entre todos os pares de cidades, armazenada como um array NumPy ou CuPy (para aceleração por GPU).
+    \item \textbf{Solução}: Um array NumPy de inteiros representando a permutação dos índices das cidades.
+    \item \textbf{Vizinhança}: Definida por movimentos 2-opt (inversão de segmentos), 3-opt (reconexão de três arestas) e trocas enviesadas (seleção de cidades baseada em proximidade espacial e distância na rota).
+\end{itemize}
+
+O algoritmo utiliza uma temperatura inicial adaptativa, calculada como $0.1 \cdot n \cdot \text{média das distâncias}$, e um cronograma de resfriamento geométrico ajustado dinamicamente com base na taxa de aceitação de movimentos. Mecanismos de reaquecimento são acionados após estagnação prolongada, redefinindo a temperatura para um valor aleatório entre 50\% e 80\% da inicial.
+
+\textbf{Justificativa:} A representação como arrays NumPy é eficiente para operações vetoriais e compatível com compilação JIT via Numba, reduzindo significativamente o tempo de execução. A matriz de distâncias pré-calculada elimina cálculos redundantes de distância, proporcionando consultas em $\mathcal{O}\left(1\right)$. A escolha de 2-opt e 3-opt é baseada em sua eficiência comprovada em TSP \cite{lin1973effective}, enquanto as trocas enviesadas aumentam a qualidade da solução. A temperatura adaptativa e o resfriamento dinâmico garantem um equilíbrio entre exploração e explotação, adaptando-se ao tamanho do problema.
+
+\subsection{Implementação}
+A implementação foi realizada em Python, utilizando as seguintes técnicas e bibliotecas:
+\begin{itemize}
+    \item \textbf{NumPy}: Para operações matriciais eficientes e manipulação de arrays.
+    \item \textbf{Numba}: Para compilação JIT de funções críticas (e.g., cálculo de distância, movimentos 2-opt e 3-opt), alcançando desempenho próximo ao de linguagens compiladas.
+    \item \textbf{CuPy}: Para aceleração por GPU na pré-computação da matriz de distâncias, quando disponível.
+    \item \textbf{ThreadPoolExecutor}: Para executar múltiplas instâncias do algoritmo em paralelo, aproveitando CPUs multi-core.
+    \item \textbf{Movimentos de Vizinhança}: Implementados com 60\% de probabilidade para 2-opt, 30\% para 3-opt (em temperaturas altas) e 10\% para trocas enviesadas, com seleção por roleta baseada em distâncias inversas.
+    \item \textbf{Heurística Inicial}: Solução inicial gerada pelo algoritmo do vizinho mais próximo, seguida de melhorias locais.
+    \item \textbf{Pós-processamento}: Aplicação de uma passagem 3-opt e iterações completas de 2-opt na melhor solução encontrada.
+\end{itemize}
+
+O algoritmo suporta parâmetros adaptativos, como número máximo de iterações (\(n \cdot 1000\)) e iterações por nível de temperatura (\(\max\left(50, n \cdot 5\right)\)), escalando com o tamanho do problema. A paralelização é configurável, permitindo ajustar o número de execuções independentes.
+
+\textbf{Justificativa:} Python foi escolhido pela sua flexibilidade e vasto ecossistema de bibliotecas científicas. Numba e CuPy foram selecionados para maximizar o desempenho, com Numba reduzindo o overhead de loops em Python e CuPy acelerando cálculos matriciais em GPUs. A paralelização com ThreadPoolExecutor é eficiente para TSP, pois cada execução do têmpera simulada é independente, permitindo explorar múltiplos ótimos locais simultaneamente. A heurística do vizinho mais próximo proporciona uma solução inicial de boa qualidade, reduzindo o tempo de convergência, enquanto o pós-processamento com 3-opt e 2-opt garante refinamento final.
+
+O pseudocódigo da SA é apresentado no Apêndice~\ref{app:sa}.
+
+\section{Algoritmo Genético}
+O Algoritmo Genético (AG) é uma meta-heurística baseada em princípios evolutivos, desenvolvida por Holland \cite{holland1992}, que explora o espaço de busca através de uma população de soluções. Para o TSP, o AG é eficaz devido à sua capacidade de manter diversidade genética.
+
+\subsection{Modelagem e Equações}
+Os componentes do AG incluem:
+\begin{itemize}
+    \item \textbf{Representação}: Cada indivíduo é uma permutação \(\pi\) dos índices das cidades.
+    \item \textbf{Função de Aptidão}: Definida como o inverso do custo da rota, para maximizar a aptidão:
+
+        \[
+        f(\pi) = \frac{1}{\text{Custo}(\pi)}.
+        \]
+    
+    \item \textbf{Inicialização}: A população inicial combina soluções do vizinho mais próximo (20\%) e permutações aleatórias (80\%).
+    \item \textbf{Seleção}: Seleção por torneio, onde \(k\) indivíduos são escolhidos aleatoriamente, e o melhor é selecionado.
+    \item \textbf{Crossover}: Partially Mapped Crossover (PMX), que preserva a ordem relativa das cidades.
+    \item \textbf{Mutação}: Troca aleatória de duas cidades com probabilidade \(P_m\), ajustada dinamicamente:
+
+        \[
+        P_m = P_m^{\text{base}} \cdot (1 + \text{progresso}),
+        \]
+
+        onde \(\text{progresso} = \text{geração atual} / \text{total de gerações}\).
+    \item \textbf{Busca Local}: Aplicada periodicamente ao melhor indivíduo usando 2-opt.
+\end{itemize}
+
+\subsection{Implementação}
+A implementação em Python utiliza:
+\begin{itemize}
+    \item \textbf{NumPy}: para manipulação eficiente de arrays.
+    \item \textbf{ThreadPoolExecutor}: para avaliação paralela da aptidão.
+    \item \textbf{Elitismo}: Os melhores indivíduos são preservados para a próxima geração.
+    \item \textbf{Busca Local}: Integração de 2-opt para refinar soluções.
+\end{itemize}
+
+O pseudocódigo do AG é apresentado no Apêndice~\ref{app:ag}.
+
+\section{Comparação com Busca Cega e Informada}
+A comparação entre SA/AG e técnicas de busca clássicas é essencial para contextualizar seu desempenho.
+
+\subsection{Busca Cega}
+A busca cega é uma abordagem de exploração do espaço de estados que não utiliza informações específicas do problema para guiar a busca. Ela é baseada em estratégias sistemáticas que garantem a exploração completa do espaço de soluções, mas sem considerar a qualidade ou a proximidade de uma solução em relação ao objetivo. Formalmente, a busca cega pode ser definida como:
+
+\textbf{Definição:} Um método de busca que explora o espaço de estados de forma exaustiva, sem utilizar heurísticas ou informações adicionais sobre o problema.
+
+\textbf{Exemplos:}
+\begin{itemize}
+    \item \textbf{Busca em Largura (BFS):} Explora todos os nós de um nível antes de avançar para o próximo nível. Sua complexidade é \(\mathcal{O}(b^d)\), onde \(b\) é o fator de ramificação e \(d\) é a profundidade da solução.
+    \item \textbf{Busca em Profundidade (DFS):} Explora um caminho até o final antes de retroceder e explorar outros caminhos. Sua complexidade é \(\mathcal{O}(b^m)\), onde \(m\) é a profundidade máxima do espaço de estados.
+\end{itemize}
+
+\textbf{Complexidade:} Para problemas como o TSP, onde o espaço de soluções é de tamanho \(n!\) (todas as permutações possíveis das cidades), a busca cega tem complexidade \(\mathcal{O}(n!)\), tornando-a inviável para instâncias com \(n > 20\).
+
+\subsection{Busca Informada}
+A busca informada utiliza informações adicionais, geralmente na forma de heurísticas, para guiar a exploração do espaço de estados em direção a soluções promissoras. Ela é mais eficiente do que a busca cega, pois evita explorar caminhos que provavelmente não levam a uma solução ótima. Formalmente, a busca informada pode ser definida como:
+
+\textbf{Definição:} Um método de busca que utiliza uma função heurística \(h(n)\) para estimar o custo de alcançar o objetivo a partir de um estado \(n\), priorizando estados com menor custo estimado.
+
+\textbf{Exemplo:}
+\begin{itemize}
+    \item \textbf{Algoritmo A*:} Combina o custo acumulado \(g(n)\) com a estimativa heurística \(h(n)\) para priorizar estados com menor \(f(n) = g(n) + h(n)\). É ótimo e completo se \(h(n)\) for admissível (não superestima o custo real).
+\end{itemize}
+
+\textbf{Complexidade:} Apesar de ser mais eficiente, a busca informada ainda pode ter complexidade exponencial no pior caso, especialmente para problemas como o TSP, onde o espaço de estados é grande. Para grafos completos, a complexidade pode ser \(O(n!)\) no pior caso.
+
+\subsection{SA e AG}
+SA e AG são meta-heurísticas que operam em tempo polinomial, oferecendo soluções aproximadas. A SA tem complexidade \(O(n^2 \cdot \text{iterações})\), enquanto o AG tem \(O(\text{população} \cdot n \cdot \text{gerações})\). A integração de busca local (2-opt/3-opt) melhora a convergência de ambos.
+
+\begin{table}[h]
+\centering
+\caption{Comparação entre Técnicas para o TSP}
+\begin{tabular}{|l|c|c|c|}
+\hline
+\textbf{Técnica} & \textbf{Complexidade} & \textbf{Escalabilidade} & \textbf{Qualidade da Solução} \\
+\hline
+Busca Cega & \(\mathcal{O}(n!)\) & Inviável (\(n > 20\)) & Exata \\
+Busca Informada & \(O(n!)\) & Limitada & Exata \\
+SA & \(\mathcal{O}(n^2 \cdot \text{iterações})\) & Boa para \(n\) pequeno & Aproximada \\
+AG & \(\mathcal{O}(\text{população} \cdot n \cdot \text{gerações})\) & Boa para \(n\) grande & Aproximada \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{Resultados}
+Os resultados experimentais foram obtidos em cada etapa da metodologia, com detalhes fornecidos nos apêndices.
+
+\subsection{Etapa 1: Pré-processamento e Inicialização}
+\begin{itemize}
+    \item \textbf{Descrição}: Calculou-se a matriz de distâncias usando NumPy ou CuPy. A solução inicial foi gerada pelo algoritmo do vizinho mais próximo.
+    \item \textbf{Resultado}: Para a instância berlin52 (\(n=52\)), a solução inicial teve custo médio de 8500. Para rat99 (\(n=99\)), foi de 1500. Detalhes estão na Tabela~\ref{tab:initial_results} no Apêndice~\ref{app:results}.
+\end{itemize}
+
+\subsection{Etapa 2: Execução do SA}
+\begin{itemize}
+    \item \textbf{Descrição}: Executou-se o SA com temperatura inicial adaptativa, resfriamento geométrico ajustado dinamicamente, e movimentos de vizinhança (60\% 2-opt, 30\% 3-opt em temperaturas altas, 10\% trocas enviesadas).
+    \item \textbf{Resultado}: Para berlin52, o SA convergiu em média a 7542 (5\% acima do ótimo).
+\end{itemize}
+
+\section{Conclusão}
+Este trabalho demonstrou que SA e AG são eficazes para o TSP, com a SA sendo mais rápida para instâncias menores e o AG mais escalável para problemas maiores. Comparadas a buscas cegas e informadas, ambas oferecem um equilíbrio superior entre qualidade e custo computacional. Trabalhos futuros podem explorar hibridizações ou outras meta-heurísticas, como otimização por colônia de formigas, para melhorar o desempenho.
+
+\bibliographystyle{sbc}
+\bibliography{caixeiro-viajante}
+
+\appendix
+
+\section{Gráficos de Benchmarking e Código Fonte}\label{app:code}
+\href{https://github.com/iLukSbr/travelling-salesman}{https://github.com/iLukSbr/travelling-salesman}
+
+\section{Pseudocódigo da SA}\label{app:sa}
+\begin{algorithm}
+    \caption{Têmpera Simulada para o TSP}
+    \begin{algorithmic}[1]
+        \Require Cidades \(C = [(x_1, y_1), \ldots, (x_n, y_n)]\), parâmetros \(T_{\text{inicial}}, T_{\text{min}}, \alpha, \text{max\_iter}, \text{iter\_por\_temp}, \text{num\_execuções}\)
+        \Ensure Melhor rota \(\pi_{\text{melhor}}\), custo \(c_{\text{melhor}}\)
+        \State Calcular matriz de distâncias \(D\)
+        \State Inicializar resultados \(R \gets []\)
+        \For{\(i \gets 1\) até \(\text{num\_execuções}\)}
+            \State \(\pi_{\text{atual}} \gets \text{VizinhoMaisPróximo}(D)\)
+            \State \(c_{\text{atual}} \gets \text{CalcularCusto}(\pi_{\text{atual}}, D)\)
+            \State \(\pi_{\text{melhor}}, c_{\text{melhor}} \gets \pi_{\text{atual}}, c_{\text{atual}}\)
+            \State \(T \gets T_0\)
+            \While{\(\text{iteração} < \text{max\_iter}\) e \(T > T_{\text{min}}\)}
+                \State Gerar vizinho \(\pi_{\text{vizinho}}, c_{\text{vizinho}}\)
+                \State \(\Delta \gets c_{\text{vizinho}} - c_{\text{atual}}\)
+                \If{\(\Delta < 0\) ou \(\text{random}() < e^{-\Delta / T}\)}
+                    \State Atualizar \(\pi_{\text{atual}}, c_{\text{atual}}\)
+                    \If{\(c_{\text{atual}} < c_{\text{melhor}}\)}
+                        \State Atualizar \(\pi_{\text{melhor}}, c_{\text{melhor}}\)
+                    \EndIf
+                \EndIf
+                \State Atualizar \(T\) com base na taxa de aceitação
+            \EndWhile
+            \State Adicionar \((\pi_{\text{melhor}}, c_{\text{melhor}})\) a \(R\)
+        \EndFor
+        \State Refinar \(\pi_{\text{melhor}}\) com 3-opt e 2-opt
+        \State \Return \(\pi_{\text{melhor}}, c_{\text{melhor}}\)
+    \end{algorithmic}
+\end{algorithm}
+
+\section{Pseudocódigo do AG}\label{app:ag}
+\begin{algorithm}
+    \caption{Algoritmo Genético Híbrido para o TSP}
+    \begin{algorithmic}[1]
+        \Require Cidades \(C = [(x_1, y_1), \ldots, (x_n, y_n)]\), parâmetros \(T_{\text{inicial}}, T_{\text{min}}, \alpha, \text{max\_iter}, \text{iter\_por\_temp}, \text{num\_execuções}\)
+        \Ensure Melhor rota \(\pi_{\text{melhor}}\), custo \(c_{\text{melhor}}\)
+        \State Calcular matriz de distâncias
+        \State Inicializar população
+        \State Avaliar aptidão em paralelo
+        \For{\(gen \gets 1\) até \(generations\)}
+            \State Ajustar \(mutation\_rate\)
+            \State Preservar \(elitism\_size\) melhores indivíduos
+            \While{tamanho da nova população \(< pop\_size\)}
+                \State Selecionar pais por torneio
+                \State Aplicar crossover PMX e mutação
+            \EndWhile
+            \If{\(gen \mod 10 = 0\) ou última geração}
+                \State Aplicar 2-opt ao melhor indivíduo
+            \EndIf
+            \State Atualizar melhor solução
+        \EndFor
+        \State \Return Melhor rota, distância
+    \end{algorithmic}
+\end{algorithm}
+
+\end{document}
