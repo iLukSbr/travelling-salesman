@@ -1,4 +1,4 @@
-\documentclass[12pt]{article}
+\documentclass[11pt]{article}
 \usepackage{sbc-template}
 \usepackage{graphicx,url}
 \usepackage[utf8]{inputenc}
@@ -21,7 +21,7 @@ Universidade Tecnológica Federal do Paraná (UTFPR) -- Curitiba -- PR -- Brazil
   \email{lucmat@alunos.utfpr.edu.br}}
 
 \begin{document}
-
+\fontsize{11pt}{11pt}\selectfont
 \maketitle
 
 \begin{resumo}
@@ -33,31 +33,31 @@ This paper presents the computational modeling of the Traveling Salesman Problem
 \end{abstract}
 
 \section{Introdução}
-O Problema do Caixeiro Viajante (TSP) é um problema clássico de otimização combinatória, classificado como NP-difícil, com aplicações em logística, planejamento de rotas e design de redes \cite{applegate2006}. O objetivo é encontrar a rota de menor distância que visita cada uma de \(n\) cidades exatamente uma vez e retorna à cidade inicial. Devido à sua complexidade, métodos exatos, como programação inteira, tornam-se inviáveis para instâncias grandes, motivando o uso de meta-heurísticas como Têmpera Simulada (SA) e Algoritmo Genético (AG).
+O Problema do Caixeiro Viajante (TSP) é um clássico de otimização combinatória, classificado como NP-difícil, com aplicações em logística, planejamento de rotas e design de redes \cite{applegate2006}. O objetivo é encontrar a rota de menor distância que visita cada uma de \(n\) cidades exatamente uma vez e retorna à cidade inicial. Devido à sua complexidade, métodos exatos, como programação inteira, tornam-se inviáveis para instâncias grandes, motivando o uso de meta-heurísticas como Têmpera Simulada (SA) e Algoritmo Genético (AG).
 
 \section{Definição Formal do Problema}
 O TSP é definido em um grafo completo não direcionado \(G = \left(V, E\right)\), onde \(V = \{v_1, v_2, \ldots, v_n\}\) representa o conjunto de \(n\) cidades, e \(E\) contém as arestas com pesos \(d\left(v_i, v_j\right)\) correspondentes às distâncias entre cidades \(v_i\) e \(v_j\). O objetivo é encontrar uma permutação \(\pi = \left[\pi_1, \pi_2, \ldots, \pi_n\right]\) dos índices das cidades que minimize o custo total da rota:
 
 \[
-\text{Custo }(\pi) = \sum_{i=1}^{n-1} d\left(\pi_i, \pi_{i+1}\right) + d\left(\pi_n, \pi_1\right),
+    \text{Custo}(\pi) = \sum_{i=1}^{n-1} d\left(\pi_i, \pi_{i+1}\right) + d\left(\pi_n, \pi_1\right)\text{,}
 \]
 
 sujeito à restrição de que cada cidade seja visitada exatamente uma vez \cite{nilsson1982}. Neste trabalho, as distâncias são euclidianas, calculadas como:
 
 \[
-d\left(v_i, v_j\right) = \sqrt{\left(x_i - x_j\right)^2 + \left(y_i - y_j\right)^2},
+    d\left(v_i, v_j\right) = \sqrt{\left(x_i - x_j\right)^2 + \left(y_i - y_j\right)^2}\text{,}
 \]
 
 onde \(\left(x_i, y_i\right)\) são as coordenadas cartesianas da cidade \(v_i\). Alternativamente, o TSP pode ser formulado como um problema de programação inteira:
 
 \[
-\min \sum_{i \neq j} d_{ij} x_{ij},
+    \min \sum_{i \neq j} d_{ij} x_{ij},
 \]
 
 sujeito a:
 
 \[
-x_{ij} \in \{0,1\}, \quad \sum_{j \neq i} x_{ij} = 1, \quad \sum_{i \neq j} x_{ij} = 1,
+    x_{ij} \in \{0,1\}, \quad \sum_{j \neq i} x_{ij} = 1, \quad \sum_{i \neq j} x_{ij} = 1\text{,}
 \]
 
 e restrições de subtour para garantir um único ciclo hamiltoniano \cite{orman2006}.
@@ -77,7 +77,7 @@ O TSP é modelado como um problema euclidiano bidimensional, onde cada cidade é
 O TSP foi modelado como um grafo completo não direcionado \(G = (V, E)\), onde \(V\) é o conjunto de \(n\) vértices (cidades) e \(E\) é o conjunto de arestas com pesos representando as distâncias euclidianas entre pares de cidades. A solução é representada como uma permutação dos índices das cidades (uma sequência \(\pi = [\pi_1, \pi_2, \ldots, \pi_n]\)), com o custo da rota dado por:
 
 \[
-\text{Custo}(\pi) = \sum_{i=1}^{n-1} d\left(\pi_i, \pi_{i+1}\right) + d\left(\pi_n, \pi_1\right),
+    \text{Custo}(\pi) = \sum_{i=1}^{n-1} d\left(\pi_i, \pi_{i+1}\right) + d\left(\pi_n, \pi_1\right)\text{,}
 \]
 
 onde \(d\left(u, v\right) = \sqrt{\left(x_u - x_v\right)^2 + \left(y_u - y_v\right)^2}\) é a distância euclidiana entre as cidades \(u\) e \(v\).
@@ -127,7 +127,7 @@ Os componentes do AG incluem:
     \item \textbf{Função de Aptidão}: Definida como o inverso do custo da rota, para maximizar a aptidão:
 
         \[
-        f(\pi) = \frac{1}{\text{Custo}(\pi)}.
+            f(\pi) = \frac{1}{\text{Custo}(\pi)}\text{.}
         \]
     
     \item \textbf{Inicialização}: A população inicial combina soluções do vizinho mais próximo (20\%) e permutações aleatórias (80\%).
@@ -136,7 +136,7 @@ Os componentes do AG incluem:
     \item \textbf{Mutação}: Troca aleatória de duas cidades com probabilidade \(P_m\), ajustada dinamicamente:
 
         \[
-        P_m = P_m^{\text{base}} \cdot (1 + \text{progresso}),
+        P_m = P_m^{\text{base}} \cdot (1 + \text{progresso})\text{,}
         \]
 
         onde \(\text{progresso} = \text{geração atual} / \text{total de gerações}\).
@@ -158,9 +158,7 @@ O pseudocódigo do AG é apresentado no Apêndice~\ref{app:ag}.
 A comparação entre SA/AG e técnicas de busca clássicas é essencial para contextualizar seu desempenho.
 
 \subsection{Busca Cega}
-A busca cega é uma abordagem de exploração do espaço de estados que não utiliza informações específicas do problema para guiar a busca. Ela é baseada em estratégias sistemáticas que garantem a exploração completa do espaço de soluções, mas sem considerar a qualidade ou a proximidade de uma solução em relação ao objetivo. Formalmente, a busca cega pode ser definida como:
-
-\textbf{Definição:} Um método de busca que explora o espaço de estados de forma exaustiva, sem utilizar heurísticas ou informações adicionais sobre o problema.
+Explora o espaço de estados de forma exaustiva, sem utilizar heurísticas ou informações adicionais sobre o problema.
 
 \textbf{Exemplos:}
 \begin{itemize}
@@ -171,9 +169,7 @@ A busca cega é uma abordagem de exploração do espaço de estados que não uti
 \textbf{Complexidade:} Para problemas como o TSP, onde o espaço de soluções é de tamanho \(n!\) (todas as permutações possíveis das cidades), a busca cega tem complexidade \(\mathcal{O}(n!)\), tornando-a inviável para instâncias com \(n > 20\).
 
 \subsection{Busca Informada}
-A busca informada utiliza informações adicionais, geralmente na forma de heurísticas, para guiar a exploração do espaço de estados em direção a soluções promissoras. Ela é mais eficiente do que a busca cega, pois evita explorar caminhos que provavelmente não levam a uma solução ótima. Formalmente, a busca informada pode ser definida como:
-
-\textbf{Definição:} Um método de busca que utiliza uma função heurística \(h(n)\) para estimar o custo de alcançar o objetivo a partir de um estado \(n\), priorizando estados com menor custo estimado.
+Utiliza uma função heurística \(h(n)\) para estimar o custo de alcançar o objetivo a partir de um estado \(n\), priorizando estados com menor custo estimado.
 
 \textbf{Exemplo:}
 \begin{itemize}
@@ -206,13 +202,11 @@ Os resultados experimentais foram obtidos em cada etapa da metodologia, com deta
 \subsection{Etapa 1: Pré-processamento e Inicialização}
 \begin{itemize}
     \item \textbf{Descrição}: Calculou-se a matriz de distâncias usando NumPy ou CuPy. A solução inicial foi gerada pelo algoritmo do vizinho mais próximo.
-    \item \textbf{Resultado}: Para a instância berlin52 (\(n=52\)), a solução inicial teve custo médio de 8500. Para rat99 (\(n=99\)), foi de 1500. Detalhes estão na Tabela~\ref{tab:initial_results} no Apêndice~\ref{app:results}.
 \end{itemize}
 
 \subsection{Etapa 2: Execução do SA}
 \begin{itemize}
     \item \textbf{Descrição}: Executou-se o SA com temperatura inicial adaptativa, resfriamento geométrico ajustado dinamicamente, e movimentos de vizinhança (60\% 2-opt, 30\% 3-opt em temperaturas altas, 10\% trocas enviesadas).
-    \item \textbf{Resultado}: Para berlin52, o SA convergiu em média a 7542 (5\% acima do ótimo).
 \end{itemize}
 
 \section{Conclusão}
@@ -221,11 +215,13 @@ Este trabalho demonstrou que SA e AG são eficazes para o TSP, com a SA sendo ma
 \bibliographystyle{sbc}
 \bibliography{caixeiro-viajante}
 
+\section*{Apêndice}
 \appendix
 
 \section{Gráficos de Benchmarking e Código Fonte}\label{app:code}
 \href{https://github.com/iLukSbr/travelling-salesman}{https://github.com/iLukSbr/travelling-salesman}
 
+\clearpage
 \section{Pseudocódigo da SA}\label{app:sa}
 \begin{algorithm}
     \caption{Têmpera Simulada para o TSP}
@@ -257,6 +253,7 @@ Este trabalho demonstrou que SA e AG são eficazes para o TSP, com a SA sendo ma
     \end{algorithmic}
 \end{algorithm}
 
+\clearpage
 \section{Pseudocódigo do AG}\label{app:ag}
 \begin{algorithm}
     \caption{Algoritmo Genético Híbrido para o TSP}
