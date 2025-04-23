@@ -1,22 +1,30 @@
 import os
+import logging
 from utils import Benchmark
+
+# Configuração do logger
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()]
+)
 
 class Main:
     @staticmethod
     def main():
         # Configuração inicial
         base_dir = os.path.dirname(os.path.abspath(__file__))
-        csv_path = Benchmark.setup_data_directory(base_dir)
+        point_quantities = [5, 10, 50]  # Quantidades variadas de pontos
+        step_sizes = [1, 2, 5, 10]
 
-        # Definição dos tamanhos de entrada para os benchmarks
-        # step_sizes = [100, 500, 1000, 5000, 10000]
-        step_sizes = [5]
+        # Gera arquivos CSV para diferentes quantidades de pontos
+        logging.info("Configurando diretórios de dados e gerando arquivos CSV...")
+        csv_paths = Benchmark.setup_data_directories(base_dir, point_quantities)
 
-        # Execução dos benchmarks
-        all_results = Benchmark.execute_benchmarks(csv_path, step_sizes)
-
-        # Geração dos gráficos de resultados
-        Benchmark.generate_results_plots(all_results)
+        # Executa benchmarks e gera gráficos para cada quantidade de pontos
+        for n_points, csv_path in csv_paths.items():
+            logging.info(f"Executando benchmarks para {n_points} pontos...")
+            Benchmark.execute_and_plot(csv_path, n_points, step_sizes, output_dir=f"benchmark_results/{n_points}")
 
 if __name__ == "__main__":
     Main.main()

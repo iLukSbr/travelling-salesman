@@ -18,3 +18,7 @@ ENV/
 
 # LOGs
 *.log
+
+# Other
+*.pdf
+*.zip

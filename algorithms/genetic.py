@@ -1,9 +1,18 @@
+import logging
 import numpy as np
 import random
 from concurrent.futures import ThreadPoolExecutor
 from .algorithm import Algorithm
 import time
 import tracemalloc
+import os
+
+# Configuração do logger
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()]
+)
 
 class Genetic(Algorithm):
     def __init__(self, cities, pop_size=200, generations=500, mutation_rate=0.02, elitism_size=4, tournament_size=5, use_gpu=True):
@@ -16,7 +25,9 @@ class Genetic(Algorithm):
         self.mutation_rate = mutation_rate
         self.elitism_size = min(elitism_size, pop_size // 2)
         self.tournament_size = tournament_size
-        self.executor = ThreadPoolExecutor(max_workers=4)
+        self.num_cores = os.cpu_count()
+        logging.info(f"Número de núcleos disponíveis no CPU: {self.num_cores}")
+        self.executor = ThreadPoolExecutor(max_workers=self.num_cores)
 
     def _fitness(self, route):
         """Fitness é o inverso da distância total."""
@@ -98,7 +109,7 @@ class Genetic(Algorithm):
     def solve(self):
         """Executa o algoritmo genético para encontrar a melhor rota TSP."""
         # Recria o executor para evitar problemas de shutdown
-        self.executor = ThreadPoolExecutor(max_workers=4)
+        self.executor = ThreadPoolExecutor(max_workers=self.num_cores)
 
         # Inicia o rastreamento de memória
         tracemalloc.start()
@@ -110,13 +121,14 @@ class Genetic(Algorithm):
             best_route = population[np.argmax(fitnesses)]
             best_dist = self.calculate_total_distance(best_route, self.dist_matrix)
 
-            print(
-                f"[INFO] Iniciando algoritmo genético com {self.generations} gerações e população de {self.pop_size} indivíduos.")
+            logging.info(
+                f"Iniciando algoritmo genético com {self.generations} gerações e população de {self.pop_size} indivíduos.")
 
             convergence = [best_dist]  # Lista para armazenar os custos ao longo das gerações
+            no_progress_count = 0  # Contador de gerações sem progresso
 
             for gen in range(self.generations):
-                print(f"[INFO] Geração {gen + 1}/{self.generations} - Melhor custo até agora: {best_dist:.2f}")
+                # logging.info(f"Geração {gen + 1}/{self.generations} - Melhor custo até agora: {best_dist:.2f}")
 
                 # Elitismo: preserva as melhores soluções
                 elite_indices = np.argsort(fitnesses)[::-1][:self.elitism_size]
@@ -153,18 +165,26 @@ class Genetic(Algorithm):
                 if current_best_dist < best_dist:
                     best_route = population[current_best_idx].copy()
                     best_dist = current_best_dist
+                    no_progress_count = 0  # Reseta o contador ao fazer progresso
+                else:
+                    no_progress_count += 1  # Incrementa o contador se não houver progresso
 
                 # Armazena o custo atual para o gráfico de convergência
                 convergence.append(best_dist)
+
+                # Interrompe se mais de 100 gerações sem progresso
+                if no_progress_count > 100:
+                    logging.info("Interrompendo devido à falta de progresso.")
+                    break
 
             # Calcula o tempo de execução e o uso de memória
             end_time = time.time()
             current, peak = tracemalloc.get_traced_memory()
             tracemalloc.stop()
 
-            print(f"[INFO] Algoritmo genético concluído. Melhor custo encontrado: {best_dist:.2f}")
-            print(f"[INFO] Tempo de execução: {end_time - start_time:.2f} segundos")
-            print(f"[INFO] Uso de memória: {peak / 1024 / 1024:.2f} MB")
+            logging.info(f"Algoritmo genético concluído. Melhor custo encontrado: {best_dist:.2f}")
+            logging.info(f"Tempo de execução: {end_time - start_time:.2f} segundos")
+            logging.info(f"Uso de memória: {peak / 1024 / 1024:.2f} MB")
 
             return {
                 "route": best_route,
@@ -176,4 +196,3 @@ class Genetic(Algorithm):
         finally:
             # Encerra o executor no final, garantindo que ele seja liberado
             self.executor.shutdown(wait=True)
-

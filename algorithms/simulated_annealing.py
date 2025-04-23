@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 import random
 import math
@@ -5,6 +6,13 @@ from numba import jit
 from .algorithm import Algorithm
 import time
 import tracemalloc
+
+# Configuração do logger
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()]
+)
 
 class SimulatedAnnealing(Algorithm):
     def __init__(self, cities, use_gpu=False, initial_temperature=1000, cooling_rate=0.95, max_iterations=10000, min_temp=1e-3):
@@ -36,62 +44,6 @@ class SimulatedAnnealing(Algorithm):
         d = route[(j + 1) % n]
         return dist_matrix[a, c] + dist_matrix[b, d] - dist_matrix[a, b] - dist_matrix[c, d]
 
-    @staticmethod
-    @jit(nopython=True)
-    def three_opt_swap(route, i, j, k, case):
-        """Realiza uma troca 3-opt com base no caso especificado (0-7)."""
-        new_route = route.copy()
-        a, b, c = i, j, k
-        if case == 0:  # Sem alteração
-            return new_route
-        elif case == 1:  # 2-opt em a-b
-            new_route[a:b + 1] = new_route[a:b + 1][::-1]
-        elif case == 2:  # 2-opt em b-c
-            new_route[b:c + 1] = new_route[b:c + 1][::-1]
-        elif case == 3:  # 2-opt em a-c
-            new_route[a:c + 1] = new_route[a:c + 1][::-1]
-        elif case == 4:  # 3-opt: inverte a-b, mantém b-c
-            new_route[a:b + 1] = new_route[a:b + 1][::-1]
-            new_route[b:c + 1] = new_route[b:c + 1][::-1]
-        elif case == 5:  # 3-opt: inverte a-b e c-d
-            new_route[a:b + 1] = new_route[a:b + 1][::-1]
-            temp = new_route[c:].copy()
-            new_route[c:] = new_route[b:c]
-            new_route[b:b + len(temp)] = temp
-        elif case == 6:  # 3-opt: inverte b-c e a-b
-            new_route[b:c + 1] = new_route[b:c + 1][::-1]
-            new_route[a:b + 1] = new_route[a:b + 1][::-1]
-        elif case == 7:  # 3-opt puro
-            temp = new_route[a:b + 1].copy()
-            new_route[a:a + (c - b + 1)] = new_route[b + 1:c + 1]
-            new_route[a + (c - b + 1):a + (c - b + 1) + (b - a + 1)] = temp
-        return new_route
-
-    @staticmethod
-    @jit(nopython=True)
-    def three_opt_delta(route, i, j, k, case, dist_matrix):
-        """Calcula a mudança incremental no custo para uma troca 3-opt."""
-        n = len(route)
-        a, b, c = route[(i - 1) % n], route[i], route[j]
-        d, e, f = route[k], route[(k + 1) % n], route[(j + 1) % n]
-
-        if case == 0:  # Sem alteração
-            return 0
-        elif case == 1:  # 2-opt em a-b
-            return dist_matrix[a, c] + dist_matrix[b, d] - dist_matrix[a, b] - dist_matrix[c, d]
-        elif case == 2:  # 2-opt em b-c
-            return dist_matrix[b, e] + dist_matrix[c, f] - dist_matrix[b, c] - dist_matrix[e, f]
-        elif case == 3:  # 2-opt em a-c
-            return dist_matrix[a, e] + dist_matrix[c, f] - dist_matrix[a, c] - dist_matrix[e, f]
-        elif case == 4:  # 3-opt: inverte a-b, mantém b-c
-            return dist_matrix[a, c] + dist_matrix[b, e] + dist_matrix[d, f] - dist_matrix[a, b] - dist_matrix[c, d] - dist_matrix[e, f]
-        elif case == 5:  # 3-opt: inverte a-b e c-d
-            return dist_matrix[a, c] + dist_matrix[d, e] + dist_matrix[b, f] - dist_matrix[a, b] - dist_matrix[c, d] - dist_matrix[e, f]
-        elif case == 6:  # 3-opt: inverte b-c e a-b
-            return dist_matrix[a, d] + dist_matrix[b, e] + dist_matrix[c, f] - dist_matrix[a, b] - dist_matrix[c, d] - dist_matrix[e, f]
-        elif case == 7:  # 3-opt puro
-            return dist_matrix[a, e] + dist_matrix[b, f] + dist_matrix[c, d] - dist_matrix[a, b] - dist_matrix[c, d] - dist_matrix[e, f]
-
     def solve(self):
         """
         Resolve o problema do caixeiro viajante usando Simulated Annealing.
@@ -108,8 +60,10 @@ class SimulatedAnnealing(Algorithm):
 
         temperature = self.initial_temperature
         convergence = [best_cost]  # Lista para armazenar os custos ao longo das iterações
+        no_progress_count = 0  # Contador de iterações sem progresso
 
         for _ in range(self.max_iterations):
+            # logging.info(f"Temperatura: {temperature:.2f} - Melhor custo: {best_cost:.2f}")
             if temperature < self.min_temp:  # Temperatura mínima para parar
                 break
 
@@ -126,6 +80,9 @@ class SimulatedAnnealing(Algorithm):
             if new_cost < current_cost or random.random() < np.exp((current_cost - new_cost) / temperature):
                 current_solution = new_solution
                 current_cost = new_cost
+                no_progress_count = 0  # Reseta o contador ao fazer progresso
+            else:
+                no_progress_count += 1  # Incrementa o contador se não houver progresso
 
             # Atualiza a melhor solução encontrada
             if current_cost < best_cost:
@@ -135,6 +92,11 @@ class SimulatedAnnealing(Algorithm):
             # Armazena o custo atual para o gráfico de convergência
             convergence.append(best_cost)
 
+            # Interrompe se mais de 100 iterações sem progresso
+            if no_progress_count > 100:
+                logging.info("Interrompendo devido a falta de progresso.")
+                break
+
             # Reduz a temperatura
             temperature *= self.cooling_rate
 
@@ -143,9 +105,9 @@ class SimulatedAnnealing(Algorithm):
         current, peak = tracemalloc.get_traced_memory()
         tracemalloc.stop()
 
-        print(f"[INFO] Algoritmo Simulated Annealing concluído. Melhor custo encontrado: {best_cost:.2f}")
-        print(f"[INFO] Tempo de execução: {end_time - start_time:.2f} segundos")
-        print(f"[INFO] Uso de memória: {peak / 1024 / 1024:.2f} MB")
+        logging.info(f"Algoritmo Simulated Annealing concluído. Melhor custo encontrado: {best_cost:.2f}")
+        logging.info(f"Tempo de execução: {end_time - start_time:.2f} segundos")
+        logging.info(f"Uso de memória: {peak / 1024 / 1024:.2f} MB")
 
         # Retorna os resultados no formato esperado
         return {
@@ -155,4 +117,3 @@ class SimulatedAnnealing(Algorithm):
             "memory_usage": peak / 1024 / 1024,
             "convergence": convergence
         }
-
